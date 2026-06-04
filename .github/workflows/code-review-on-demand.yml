@@ -1,0 +1,36 @@
+# On-demand re-review for the org code-review gate.
+#
+# WHY THIS FILE EXISTS: most repos get the gate via the org ruleset's *required
+# workflow*, which GitHub only ever triggers on `pull_request`. Required workflows
+# can NOT be triggered by `issue_comment`, so the gate's built-in `/review` command
+# is unreachable through that path. This tiny caller adds *only* the `issue_comment`
+# path — push/open enforcement stays exactly as-is on the ruleset. Drop this file in
+# any repo where you want authors to be able to comment `/review` for a fresh review.
+#
+# It does NOT review on push/open itself (no `pull_request` trigger) so it never
+# double-reviews alongside the ruleset. The job-level `if` keeps ordinary comments
+# from ever starting a run; the reusable gate then posts the 👀 reaction and runs the
+# review natively (it already understands the `issue_comment` event it inherits here).
+name: Code Review (/review on demand)
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  review:
+    # Only spin up for `/review` from a writer on a pull request — every other comment
+    # is a no-op (no run, no minutes).
+    if: >-
+      ${{ github.event.issue.pull_request
+        && startsWith(github.event.comment.body, '/review')
+        && (github.event.comment.author_association == 'OWNER'
+            || github.event.comment.author_association == 'MEMBER'
+            || github.event.comment.author_association == 'COLLABORATOR') }}
+    uses: sport24-dk/.github/.github/workflows/code-review-gate.yml@main
+    secrets: inherit
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+      statuses: write   # publish the required `code-review-gate` commit status (so /review updates the gate)
